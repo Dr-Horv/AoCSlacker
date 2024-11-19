@@ -54,7 +54,7 @@ const fetchNamesAndScores = (leaderBoardId, sessionCookie, year) =>
 exports.fetchNamesAndScores = fetchNamesAndScores;
 
 const dayLeaderboard = (leaderboard) => {
-  var day = new Date().getDate();
+  const day = new Date().getDate();
   /* Credit to https://github.com/lindskogen/ for "magic script" */
   const rawData = Object.values(leaderboard.members)
     .filter((member) => member.completion_day_level[day] != null)
