@@ -1,3 +1,4 @@
+.idea/
 node_modules/
 public/components
 .sass-cache
@@ -7,3 +8,4 @@ last.json
 **/*.service
 **/*.timer
 run.sh
+

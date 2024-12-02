@@ -9,6 +9,7 @@ const readFile = promisify(fs.readFile);
 const writeFile = promisify(fs.writeFile);
 
 const SLACK_URL_TOKEN = process.env.SLACK_URL_TOKEN;
+const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL;
 const LEADERBOARD_ID = process.env.LEADERBOARD_ID;
 const SESSION_COOKIE = process.env.SESSION_COOKIE;
 const YEAR = process.env.YEAR;
@@ -48,42 +49,21 @@ const formatLeaderboard = list => {
 
 const longestProp = (list, prop) => _.max(list.map(item => item[prop].toString().length));
 
-fetchNamesAndScores(LEADERBOARD_ID, SESSION_COOKIE, YEAR).then(({sortedEntries: namesAndScores, leaderboard}) => {
-  const totalList = namesAndScores.map(
-    ([name, score, globalScore], index) => ({name, score, position: index + 1, globalScore})
-  )
-
-  const list = totalList.slice(0, 25);
-
-  const leaderboardUrl = `https://adventofcode.com/${YEAR}/leaderboard/private/view/${LEADERBOARD_ID}`;
-
-  readFile(fileName, "utf8")
-    .catch(() => "[]")
-    .then(JSON.parse)
-    .then(previousLeaderboard => {
-      if (!_.isEqual(previousLeaderboard, list)) {
-        updateLeaderboard(leaderboardUrl, list, previousLeaderboard, leaderboard);
-      }
-    });
-});
-
-const updateLeaderboard = (leaderboardUrl, list, previousLeaderboard, leaderboard) => {
-  const comparedList = toComparedList(list, previousLeaderboard);
-
+const slackTotalLeaderboardRequestOptions = totalLeaderboardText => {
   const payloadTotalLeaderboard = {
-    text: `${leaderboardUrl}\n` + formatLeaderboard(comparedList),
+    text: totalLeaderboardText,
     username: "Advent of Code - Total",
     icon_url: "https://adventofcode.com/favicon.png"
   };
 
-  const optionsTotal = {
+  return {
     url: SLACK_URL_TOKEN,
     body: JSON.stringify(payloadTotalLeaderboard)
   };
+};
 
-  const dailyMessages = dayLeaderboard(leaderboard);
-
-  const dailyOptions = dailyMessages
+const slackDailyRequestOptions = dailyMessages => {
+  return dailyMessages
     .map((text) => ({
       url: SLACK_URL_TOKEN,
       body: JSON.stringify({
@@ -92,15 +72,179 @@ const updateLeaderboard = (leaderboardUrl, list, previousLeaderboard, leaderboar
         icon_url: "https://adventofcode.com/favicon.png"
       })
     }));
+};
+
+const personAdaptiveCardRow = (pos, name, score, arrow) => {
+  return ({
+    "type": "TableRow",
+    "cells": [
+      {
+        "type": "TableCell",
+        "items": [
+          {
+            "type": "TextBlock",
+            "text": pos.toString(),
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "TableCell",
+        "items": [
+          {
+            "type": "TextBlock",
+            "text": name.toString(),
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "TableCell",
+        "items": [
+          {
+            "type": "TextBlock",
+            "text": score,
+            "wrap": true
+          }
+        ]
+      },
+      {
+        "type": "TableCell",
+        "horizontalAlignment": "Center",
+        "items": [
+          {
+            "type": "TextBlock",
+            "text": arrow,
+            "wrap": true
+          }
+        ]
+      },
+    ]
+  });
+};
+
+const postToTeams = comparedList => {
+  const table = {
+    "type": "Table",
+    "columns": [
+      {
+        "width": 1
+      },
+      {
+        "width": 6
+      },
+      {
+        "width": 2
+      },
+      {
+        "width": 1
+      }
+    ],
+    "rows": [
+      {
+        "type": "TableRow",
+        "cells": [
+          {
+            "type": "TableCell",
+            "id": "1",
+            "items": [
+              {
+                "type": "TextBlock",
+                "text": "Pos",
+              }
+            ]
+          },
+          {
+            "type": "TableCell",
+            "items": [
+              {
+                "type": "TextBlock",
+                "text": "Name",
+              }
+            ]
+          },
+          {
+            "type": "TableCell",
+            "items": [
+              {
+                "type": "TextBlock",
+                "text": "Score",
+              }
+            ]
+          },
+          {
+            "type": "TableCell",
+            "items": [
+              {
+                "type": "TextBlock",
+                "text": "Change",
+              }
+            ]
+          }
+        ],
+      },
+      ...comparedList.map(li => personAdaptiveCardRow(li.position, li.name, li.score, li.change))
+    ]
+  }
+
+  const parts = [
+    {
+      "type": "TextBlock",
+      "size": "Medium",
+      "weight": "Bolder",
+      "text": "AoC Leaderboard Test 2024-11-19"
+    },
+    table
+  ]
+
+  const body = {
+    "type": "message",
+    "attachments": [
+      {
+        "contentType": "application/vnd.microsoft.card.adaptive",
+        "contentUrl": null,
+        "content": {
+          "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+          "type": "AdaptiveCard",
+          "version": "1.5",
+          "body": parts,
+          "msteams": {
+            "width": "Full"
+          }
+        }
+      }
+    ]
+  }
+
+  request.post({
+    url: TEAMS_WEBHOOK_URL,
+    body: JSON.stringify(body)
+  }, undefined, (data, error) => {
+
+  })
+};
+
+const updateLeaderboard = (leaderboardUrl, list, previousLeaderboard, leaderboard) => {
+  const comparedList = toComparedList(list, previousLeaderboard);
+  const totalLeaderboardText = `${leaderboardUrl}\n` + formatLeaderboard(comparedList);
+  const dailyMessages = dayLeaderboard(leaderboard);
 
   writeFile(fileName, JSON.stringify(comparedList)).then(() => {
-    request.post(optionsTotal, undefined, () => {
-      dailyOptions.forEach(options => request.post(options));
-    });
+    if(SLACK_URL_TOKEN) {
+      const slackTotalOption = slackTotalLeaderboardRequestOptions(totalLeaderboardText);
+      const slackDailyOptions = slackDailyRequestOptions(dailyMessages);
+      request.post(slackTotalOption, undefined, () => {
+        slackDailyOptions.forEach(options => request.post(options));
+      });
+    }
+    if (TEAMS_WEBHOOK_URL) {
+      postToTeams(comparedList);
+    }
+
   });
 }
 
-toComparedList = (list, last) => {
+const toComparedList = (list, last) => {
   return list.map(p => {
     const currPos = p.position;
     const lastEntryOfPerson = last.find(item => item.name === p.name);
@@ -114,4 +258,33 @@ toComparedList = (list, last) => {
     return {...p, change: ''};
   });
 }
+
+
+
+const run = async () => {
+  await fetchNamesAndScores(LEADERBOARD_ID, SESSION_COOKIE, YEAR).then(({sortedEntries: namesAndScores, leaderboard}) => {
+    const totalList = namesAndScores.map(
+      ([name, score, globalScore], index) => ({name, score, position: index + 1, globalScore})
+    )
+
+    const list = totalList.slice(0, 25).filter(p => p.score > 0);
+
+    const leaderboardUrl = `https://adventofcode.com/${YEAR}/leaderboard/private/view/${LEADERBOARD_ID}`;
+
+    readFile(fileName, "utf8")
+      .catch(() => "[]")
+      .then(JSON.parse)
+      .then(previousLeaderboard => {
+        if (!_.isEqual(previousLeaderboard, list)) {
+          updateLeaderboard(leaderboardUrl, list, previousLeaderboard, leaderboard);
+        }
+      });
+  });
+}
+
+run().catch(e => {
+  console.error(`ERROR: ${e.message}`)
+  console.error(e)
+  process.exit(1)
+})
 

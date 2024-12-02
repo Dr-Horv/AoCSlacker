@@ -1,0 +1,30 @@
+name: Post to Teams
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 21 * * *" # Runs daily at 9 PM CET
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22.11'
+
+      - name: Install Dependencies
+        run: yarn install
+
+      - name: Run the Application
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          SESSION_COOKIE: ${{ secrets.SESSION_COOKIE }}
+          LEADERBOARD_ID: ${{ vars.LEADERBOARD_ID }}
+          YEAR: ${{ vars.YEAR }}
+        run: |
+          node app.js
