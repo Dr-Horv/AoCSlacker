@@ -21,9 +21,10 @@ jobs:
         run: yarn install
 
       - name: Run the Application
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          SESSION_COOKIE: ${{ secrets.SESSION_COOKIE }}
+          LEADERBOARD_ID: ${{ vars.LEADERBOARD_ID }}
+          YEAR: ${{ vars.YEAR }}
         run: |
-          echo "LEADERBOARD_ID=${{ env.LEADERBOARD_ID }}" >> $GITHUB_ENV
-          echo "YEAR=${{ env.YEAR }}" >> $GITHUB_ENV
-          echo "TEAMS_WEBHOOK_URL=${{ secrets.TEAMS_WEBHOOK_URL }}" >> $GITHUB_ENV
-          echo "SESSION_COOKIE=${{ secrets.SESSION_COOKIE }}" >> $GITHUB_ENV
           node app.js
