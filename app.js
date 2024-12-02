@@ -267,7 +267,7 @@ const run = async () => {
       ([name, score, globalScore], index) => ({name, score, position: index + 1, globalScore})
     )
 
-    const list = totalList.slice(0, 25);
+    const list = totalList.slice(0, 25).filter(p => p.score > 0);
 
     const leaderboardUrl = `https://adventofcode.com/${YEAR}/leaderboard/private/view/${LEADERBOARD_ID}`;
 
